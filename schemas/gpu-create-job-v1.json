@@ -1,0 +1,372 @@
+{
+  "$defs": {
+    "ConsentPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "granted": {
+          "const": true,
+          "title": "Granted",
+          "type": "boolean"
+        },
+        "provider_name": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Provider Name",
+          "type": "string"
+        },
+        "expires_after_hours": {
+          "maximum": 24,
+          "minimum": 1,
+          "title": "Expires After Hours",
+          "type": "integer"
+        },
+        "delete_after_download": {
+          "const": true,
+          "title": "Delete After Download",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "granted",
+        "provider_name",
+        "expires_after_hours",
+        "delete_after_download"
+      ],
+      "title": "ConsentPayload",
+      "type": "object"
+    },
+    "ExportPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "codec": {
+          "enum": [
+            "h264",
+            "h265"
+          ],
+          "title": "Codec",
+          "type": "string"
+        },
+        "crf": {
+          "maximum": 51,
+          "minimum": 0,
+          "title": "Crf",
+          "type": "integer"
+        },
+        "preset": {
+          "enum": [
+            "fast",
+            "medium",
+            "slow"
+          ],
+          "title": "Preset",
+          "type": "string"
+        },
+        "method": {
+          "enum": [
+            "TELEA",
+            "NS"
+          ],
+          "title": "Method",
+          "type": "string"
+        },
+        "radius": {
+          "maximum": 20,
+          "minimum": 1,
+          "title": "Radius",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "codec",
+        "crf",
+        "preset",
+        "method",
+        "radius"
+      ],
+      "title": "ExportPayload",
+      "type": "object"
+    },
+    "JobDocument": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "metadata": {
+          "$ref": "#/$defs/MetadataPayload"
+        },
+        "masks": {
+          "items": {
+            "$ref": "#/$defs/MaskPayload"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "title": "Masks",
+          "type": "array"
+        },
+        "model": {
+          "maxLength": 80,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_.-]+$",
+          "title": "Model",
+          "type": "string"
+        },
+        "export": {
+          "$ref": "#/$defs/ExportPayload"
+        },
+        "consent": {
+          "$ref": "#/$defs/ConsentPayload"
+        }
+      },
+      "required": [
+        "schema_version",
+        "metadata",
+        "masks",
+        "model",
+        "export",
+        "consent"
+      ],
+      "title": "JobDocument",
+      "type": "object"
+    },
+    "MaskPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "rectangle",
+            "polygon",
+            "brush"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "points": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array"
+          },
+          "maxItems": 10000,
+          "minItems": 1,
+          "title": "Points",
+          "type": "array"
+        },
+        "start": {
+          "minimum": 0,
+          "title": "Start",
+          "type": "number"
+        },
+        "end": {
+          "exclusiveMinimum": 0,
+          "title": "End",
+          "type": "number"
+        },
+        "padding": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Padding",
+          "type": "integer"
+        },
+        "feather": {
+          "maximum": 50,
+          "minimum": 0,
+          "title": "Feather",
+          "type": "integer"
+        },
+        "brush_size": {
+          "maximum": 500,
+          "minimum": 1,
+          "title": "Brush Size",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "points",
+        "start",
+        "end",
+        "padding",
+        "feather",
+        "brush_size"
+      ],
+      "title": "MaskPayload",
+      "type": "object"
+    },
+    "MetadataPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "width": {
+          "exclusiveMinimum": 0,
+          "maximum": 4096,
+          "title": "Width",
+          "type": "integer"
+        },
+        "height": {
+          "exclusiveMinimum": 0,
+          "maximum": 4096,
+          "title": "Height",
+          "type": "integer"
+        },
+        "duration": {
+          "exclusiveMinimum": 0,
+          "maximum": 30,
+          "title": "Duration",
+          "type": "number"
+        },
+        "video_index": {
+          "minimum": 0,
+          "title": "Video Index",
+          "type": "integer"
+        },
+        "fps": {
+          "maxLength": 32,
+          "title": "Fps",
+          "type": "string"
+        },
+        "time_base": {
+          "maxLength": 32,
+          "title": "Time Base",
+          "type": "string"
+        },
+        "start_time": {
+          "title": "Start Time",
+          "type": "number"
+        },
+        "rotation": {
+          "title": "Rotation",
+          "type": "integer"
+        },
+        "sar": {
+          "maxLength": 32,
+          "title": "Sar",
+          "type": "string"
+        },
+        "pix_fmt": {
+          "maxLength": 64,
+          "title": "Pix Fmt",
+          "type": "string"
+        },
+        "color_space": {
+          "maxLength": 64,
+          "title": "Color Space",
+          "type": "string"
+        },
+        "color_transfer": {
+          "maxLength": 64,
+          "title": "Color Transfer",
+          "type": "string"
+        },
+        "color_primaries": {
+          "maxLength": 64,
+          "title": "Color Primaries",
+          "type": "string"
+        },
+        "color_range": {
+          "maxLength": 64,
+          "title": "Color Range",
+          "type": "string"
+        },
+        "audio_codec": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Audio Codec"
+        },
+        "hdr": {
+          "title": "Hdr",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "width",
+        "height",
+        "duration",
+        "video_index",
+        "fps",
+        "time_base",
+        "start_time",
+        "rotation",
+        "sar",
+        "pix_fmt",
+        "color_space",
+        "color_transfer",
+        "color_primaries",
+        "color_range",
+        "audio_codec",
+        "hdr"
+      ],
+      "title": "MetadataPayload",
+      "type": "object"
+    },
+    "UploadSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "size_bytes": {
+          "exclusiveMinimum": 0,
+          "title": "Size Bytes",
+          "type": "integer"
+        },
+        "sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "extension": {
+          "enum": [
+            ".mp4",
+            ".mov"
+          ],
+          "title": "Extension",
+          "type": "string"
+        }
+      },
+      "required": [
+        "size_bytes",
+        "sha256",
+        "extension"
+      ],
+      "title": "UploadSpec",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "capability_revision": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Capability Revision",
+      "type": "string"
+    },
+    "document": {
+      "$ref": "#/$defs/JobDocument"
+    },
+    "upload": {
+      "$ref": "#/$defs/UploadSpec"
+    }
+  },
+  "required": [
+    "capability_revision",
+    "document",
+    "upload"
+  ],
+  "title": "CreateJob",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:logo-remover:gpu-create-job:1.0"
+}

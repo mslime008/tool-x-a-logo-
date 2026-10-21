@@ -1,4 +1,4 @@
-# Xóa logo video — Windows MVP (Phase 1)
+# Xóa logo video — Windows desktop và GPU worker riêng
 
 Ứng dụng desktop tiếng Việt để inpaint logo/đồ họa **do người dùng chọn** trên video người dùng sở hữu hoặc được phép chỉnh sửa. Chạy CPU, không cần CUDA/RTX; GeForce MX330 2 GB không phải điều kiện chạy. Đây là MVP có kiểm thử, chưa phải bản Windows đóng gói/phát hành đã qua QA trên máy thật.
 
@@ -56,23 +56,25 @@ src/logo_remover/
   export.py       FFmpeg decode, tệp tạm, VFR encode, audio/metadata
   queue.py        snapshot mỗi tác vụ, worker và cancellation
   settings.py     QSettings, chỉ lưu thư mục đầu ra không chứa secrets
-  providers.py    interface cloud và mock rõ nhãn
+  providers.py    hợp đồng job/consent và mock rõ nhãn
+  cloud_client.py HTTPS upload/status/cancel/download/recovery CLI
+  gpu_service/    API riêng, durable queue, GPU worker, temporal adapter
 schemas/cloud-job-v1.json
 ```
 
 Không gọi shell khi xử lý đường dẫn media; subprocess dùng danh sách argument. FFmpeg/ffprobe phải được cài từ nguồn tin cậy; ứng dụng chưa sandbox parser media, chỉ dùng media tin cậy. Tôn trọng giấy phép FFmpeg/x264/x265 khi đóng gói/phân phối; packaging nằm ngoài Phase 1.
 
-## Cloud: chỉ hợp đồng mở rộng, chưa có AI backend
+## Cloud GPU: dịch vụ riêng cho RunPod GPU Pods
 
-UI **Đám mây AI chất lượng** báo chưa tích hợp và không tải dữ liệu lên. **Tự động** dùng local; không có fallback upload âm thầm. `CloudProvider` có `submit`, `poll`, `cancel`, `retrieve`, `delete`; không endpoint/provider/model thực nào được gán sẵn. `MockProvider` chỉ mô phỏng trạng thái trong RAM, nhãn `MOCK`, không đọc/upload video và `retrieve` luôn báo không có kết quả AI.
+Đã có API HTTPS client và dịch vụ GPU riêng (FastAPI, SQLite queue bền vững, worker process), dành cho **RunPod GPU Pods**, không phải RunPod Serverless. Không có hạ tầng trả phí nào được tự tạo. Không cần đưa RunPod account API key vào desktop.
 
-Job JSON v1.0 gồm metadata (không chứa local path), mask/tọa độ/thời gian, tên model, thiết lập xuất và xác nhận upload; schema tại `schemas/cloud-job-v1.json`. Adapter thực ở Phase 3 **phải**:
+- Local và Auto vẫn chạy cục bộ, không upload. Cloud yêu cầu cấu hình `LOGO_CLOUD_URL`/`LOGO_CLOUD_TOKEN` ngoài Git và xác nhận từng video, provider, vùng dữ liệu, chính sách, model, thời hạn lưu và phí trước khi upload.
+- Upload video/mask có xác thực, kiểm tra SHA-256/kích thước; queue có lease/fencing, trạng thái, hủy, retry và khôi phục sau lỗi. Tải kết quả xác minh hash rồi mới yêu cầu xóa; máy chủ áp dụng TTL 1–24 giờ và dọn tệp. Xem tài liệu về giới hạn xóa trong thời gian Pod tắt.
+- Model dùng cửa sổ nhiều frame có overlap, blend kết quả, ROI cố định và tách cảnh heuristic. Giữ pipeline FFmpeg/audio nguồn của local. Chất lượng theo thời gian phụ thuộc model thực, không bảo đảm hết nhấp nháy.
+- **Không bundle model/weights pretrained.** License ProPainter upstream đã được kiểm tra: S-Lab License 1.0 giới hạn non-commercial, cần quyền riêng cho commercial, nên không tích hợp mặc định. Adapter TorchScript/Python yêu cầu operator cấu hình model đã được cấp quyền và checksum. `test-identity` chỉ kiểm tra hệ thống, không xóa logo.
+- Preview cloud vẫn dùng thuật toán local và có thông báo; chỉ export cloud đã xác nhận mới dùng model GPU.
 
-- Xác thực schema và quan hệ `start < end`, giới hạn kích thước và thời lượng, capability/model thực; không chỉ tin JSON do client gửi.
-- Xin xác nhận rõ ràng cho **từng job** với tên provider, tên video, phạm vi upload, vùng dữ liệu, model, thời gian lưu và chính sách xóa; timestamp consent chỉ có hiệu lực cho lần submit đó. Không chọn hộ hoặc tự submit khi ở Auto.
-- Dùng TLS có xác minh, upload URL ngắn hạn, object ID ngẫu nhiên, storage riêng tư và encryption at rest; không gửi local path hoặc key trong JSON/log.
-- Hạn lưu tối đa 24 giờ, xóa input/mask/result sau tải kết quả hoặc sau hủy; cung cấp trạng thái/xác nhận xóa và dọn bản bỏ dở. Retention phía server phải thực thi dù client mất kết nối. Không tuyên bố mock đang thực thi TTL/storage vì mock không lưu media.
-- Giữ key ngoài Git bằng biến môi trường dành riêng adapter hoặc Windows Credential Manager; key không nằm trong QSettings/job JSON. Không có API key cần thiết trong Phase 1. Không hardcode endpoint.
+Hướng dẫn triển khai, tensor contract, API, bảo mật, lưu/xóa dữ liệu, phục hồi và kiểm thử: **[docs/gpu-operations.md](docs/gpu-operations.md)**. Bằng chứng kiểm tra license: **[docs/model-licenses.md](docs/model-licenses.md)**. Chưa xác minh inference CUDA, image GPU hoặc chất lượng model thực trên RunPod.
 
 ## Kiểm thử
 
@@ -92,4 +94,4 @@ Bộ test gồm rasterization/padding/feather và tính bất biến ngoài mask
 
 ## Các giai đoạn sau (chưa triển khai)
 
-Phase 2: tracking logo di chuyển, cải thiện độ ổn định theo thời gian và điều khiển mask nâng cao. Phase 3: adapter GPU độc lập có consent/storage thật. Phase 4: batch nâng cao, QA, installer/Windows packaging. Phase 1 đã có mask theo khoảng thời gian cơ bản và batch queue trong phiên; không có mô hình deep learning cục bộ hoặc cloud thực.
+Tracking logo tự động, batch nâng cao, installer và QA Windows trực quan vẫn chưa triển khai. Dịch vụ GPU Pods đã có kiến trúc/lifecycle thực; model thương mại, hạ tầng, GPU acceptance và vận hành production do operator cấu hình/duyệt riêng. Không có mô hình deep learning cục bộ được bundle.

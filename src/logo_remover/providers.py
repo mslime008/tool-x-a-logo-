@@ -1,4 +1,4 @@
-"""Phase 3 extension point. Mock never uploads or changes media."""
+"""Shared cloud contracts. Real HTTP client is in cloud_client; mock never uploads."""
 from dataclasses import asdict, dataclass
 from enum import Enum
 from pathlib import Path

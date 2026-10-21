@@ -1,0 +1,21 @@
+*
+!pyproject.toml
+!README.md
+!src/
+!src/**
+src/**/__pycache__/
+
+src/*.egg-info/
+# Never bake local credentials, media or weights, even if placed under src/.
+**/.env
+**/.env.*
+**/secrets/**
+**/credentials*
+**/*.key
+**/*.pem
+**/*.pt
+**/*.pth
+**/*.safetensors
+**/*.mp4
+**/*.mov
+**/service-config*.json

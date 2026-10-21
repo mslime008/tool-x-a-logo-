@@ -69,7 +69,8 @@ def read_frame(meta: VideoMetadata, seconds: float) -> np.ndarray:
 
 def export_video(meta: VideoMetadata, masks: list[Mask], output: Path,
                  settings: ExportSettings, cancel: threading.Event | None = None,
-                 progress: Callable[[int, str], None] = lambda *_: None) -> Path:
+                 progress: Callable[[int, str], None] = lambda *_: None,
+                 *, frame_processor: Callable | None = None, safe_media: bool = False) -> Path:
     cancel = cancel or threading.Event()
     settings.validate()
     for mask in masks:
@@ -85,7 +86,7 @@ def export_video(meta: VideoMetadata, masks: list[Mask], output: Path,
         raise MediaError("Xuất yuv420p cần kích thước chẵn; không tự thay đổi kích thước nguồn.")
     output.parent.mkdir(parents=True, exist_ok=True)
     try:
-        times, durations = frame_times(meta, cancel)
+        times, durations = frame_times(meta, cancel, safe=safe_media)
     except MediaError:
         if cancel.is_set():
             raise Cancelled("Đã hủy tác vụ.") from None
@@ -94,12 +95,13 @@ def export_video(meta: VideoMetadata, masks: list[Mask], output: Path,
     if shutil.disk_usage(output.parent).free < required:
         raise MediaError(f"Thiếu dung lượng tạm; cần khoảng {required / 1024**3:.1f} GiB trống ở thư mục đầu ra.")
     ffmpeg = binary("ffmpeg")
+    input_options = ["-protocol_whitelist", "file,pipe", "-format_whitelist", "mov", "-enable_drefs", "0"] if safe_media else []
     with tempfile.TemporaryDirectory(prefix="logo-remover-", dir=output.parent) as temp:
         root = Path(temp)
         log = root / "ffmpeg.log"
         done = threading.Event()
         with log.open("wb") as stderr:
-            decoder = subprocess.Popen([ffmpeg, "-v", "error", "-threads", "2", "-filter_threads", "1", "-noautorotate", "-i", meta.path,
+            decoder = subprocess.Popen([ffmpeg, "-v", "error", "-threads", "2", "-filter_threads", "1", "-noautorotate", *input_options, "-i", meta.path,
                                         "-map", f"0:{meta.video_index}", "-fps_mode", "passthrough", "-threads", "1",
                                         "-f", "rawvideo", "-pix_fmt", "bgr24", "pipe:1"],
                                        stdout=subprocess.PIPE, stderr=stderr)
@@ -124,7 +126,8 @@ def export_video(meta: VideoMetadata, masks: list[Mask], output: Path,
                                 raise Cancelled("Đã hủy tác vụ.")
                             raise MediaError("Số khung giải mã không khớp PTS. " + log.read_text(errors="replace")[-1000:])
                         frame = np.frombuffer(raw, np.uint8).reshape(meta.height, meta.width, 3)
-                        repaired = inpaint(frame, masks, seconds, settings.method, settings.radius)
+                        repaired = (frame_processor(frame, masks, seconds) if frame_processor is not None
+                                    else inpaint(frame, masks, seconds, settings.method, settings.radius))
                         name = f"frame-{index:08d}.png"
                         if not cv2.imwrite(str(root / name), repaired, [cv2.IMWRITE_PNG_COMPRESSION, 1]):
                             raise MediaError("Không ghi được khung hình tạm.")
@@ -188,7 +191,7 @@ def export_video(meta: VideoMetadata, masks: list[Mask], output: Path,
         # Keep relative stream offsets: video starts at zero, shift source audio by video start.
         command = [ffmpeg, "-v", "error", "-nostdin", "-n", "-copyts", "-display_rotation", str(meta.rotation),
                    "-noautorotate", "-i", str(intermediate),
-                   "-itsoffset", str(-meta.start_time), "-noautorotate", "-i", meta.path,
+                   "-itsoffset", str(-meta.start_time), "-noautorotate", *input_options, "-i", meta.path,
                    "-map", "0:v:0", "-map", "1:a?", "-map_metadata", "1", "-map_chapters", "-1",
                    "-c:v", "copy"]
         compatible = {"aac", "mp3", "alac", "ac3", "eac3"}
