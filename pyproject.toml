@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ai-video-logo-remover"
+version = "0.1.0"
+description = "Vietnamese CPU-first desktop video inpainting MVP"
+requires-python = ">=3.11,<3.14"
+dependencies = ["numpy>=1.26,<3", "opencv-python-headless>=4.9,<5", "PySide6>=6.7,<7"]
+
+[project.optional-dependencies]
+test = ["pytest>=8,<10", "jsonschema>=4.21,<5"]
+
+[project.gui-scripts]
+logo-remover = "logo_remover.app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,284 @@
+{
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "width": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32768
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32768
+        },
+        "duration": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "fps": {
+          "type": "string"
+        },
+        "time_base": {
+          "type": "string"
+        },
+        "start_time": {
+          "type": "number"
+        },
+        "rotation": {
+          "type": "integer"
+        },
+        "sar": {
+          "type": "string"
+        },
+        "pix_fmt": {
+          "type": "string"
+        },
+        "color_space": {
+          "type": "string"
+        },
+        "color_transfer": {
+          "type": "string"
+        },
+        "color_primaries": {
+          "type": "string"
+        },
+        "color_range": {
+          "type": "string"
+        },
+        "audio_codec": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "hdr": {
+          "type": "boolean"
+        },
+        "video_index": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "width",
+        "height",
+        "duration",
+        "fps",
+        "time_base",
+        "start_time",
+        "rotation",
+        "sar",
+        "pix_fmt",
+        "color_space",
+        "color_transfer",
+        "color_primaries",
+        "color_range",
+        "audio_codec",
+        "hdr",
+        "video_index"
+      ],
+      "additionalProperties": false
+    },
+    "masks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "enum": [
+              "rectangle",
+              "polygon",
+              "brush"
+            ]
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "minItems": 1
+          },
+          "start": {
+            "type": "number",
+            "minimum": 0
+          },
+          "end": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "padding": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "feather": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 50
+          },
+          "brush_size": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500
+          }
+        },
+        "required": [
+          "kind",
+          "points",
+          "start",
+          "end",
+          "padding",
+          "feather",
+          "brush_size"
+        ],
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "rectangle"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "points": {
+                  "minItems": 2
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "polygon"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "points": {
+                  "minItems": 3
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "brush"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "points": {
+                  "minItems": 1
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "model": {
+      "type": "string",
+      "minLength": 1
+    },
+    "export": {
+      "type": "object",
+      "properties": {
+        "codec": {
+          "enum": [
+            "h264",
+            "h265"
+          ]
+        },
+        "crf": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 51
+        },
+        "preset": {
+          "enum": [
+            "fast",
+            "medium",
+            "slow"
+          ]
+        },
+        "method": {
+          "enum": [
+            "TELEA",
+            "NS"
+          ]
+        },
+        "radius": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20
+        }
+      },
+      "required": [
+        "codec",
+        "crf",
+        "preset",
+        "method",
+        "radius"
+      ],
+      "additionalProperties": false
+    },
+    "consent": {
+      "type": "object",
+      "properties": {
+        "granted": {
+          "const": true
+        },
+        "provider_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "expires_after_hours": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 24
+        },
+        "delete_after_download": {
+          "const": true
+        }
+      },
+      "required": [
+        "granted",
+        "provider_name",
+        "expires_after_hours",
+        "delete_after_download"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "schema_version",
+    "metadata",
+    "masks",
+    "model",
+    "export",
+    "consent"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:logo-remover:cloud-job:1.0",
+  "title": "Logo Remover cloud job v1.0"
+}

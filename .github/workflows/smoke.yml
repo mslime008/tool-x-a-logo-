@@ -1,0 +1,27 @@
+name: CPU smoke tests
+on: [push, pull_request]
+jobs:
+  linux-cpu:
+    runs-on: ubuntu-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg libegl1 libopengl0
+      - run: python -m pip install -e '.[test]'
+      - run: python -m pytest -q
+  windows-desktop-smoke:
+    runs-on: windows-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -e '.[test]'
+      - run: python -m pytest -q tests/test_masks.py tests/test_metadata.py tests/test_desktop.py tests/test_providers.py
