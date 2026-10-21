@@ -1,0 +1,30 @@
+# Default target is a CUDA-capable GPU Pod. No deployment/provisioning occurs here.
+FROM python:3.11-slim-trixie AS service
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 OMP_NUM_THREADS=2
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certificates libegl1 libopengl0 \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --create-home --uid 10001 worker
+WORKDIR /app
+COPY pyproject.toml README.md ./
+# Code changes reuse dependency layers; enterprise trust stays a build-only secret.
+RUN --mount=type=secret,id=build_ca --mount=type=cache,target=/root/.cache/pip \
+    if [ -f /run/secrets/build_ca ]; then export PIP_CERT=/run/secrets/build_ca SSL_CERT_FILE=/run/secrets/build_ca; fi \
+    && python -c "import sys,subprocess,tomllib; p=tomllib.load(open('pyproject.toml','rb'))['project']; subprocess.run([sys.executable,'-m','pip','install','setuptools>=68','wheel',*p['dependencies'],*p['optional-dependencies']['service']],check=True)"
+COPY src ./src
+RUN python -m pip install --no-index --no-deps --no-build-isolation . \
+    && python -m pip freeze > /app/build-packages.txt \
+    && mkdir /data && chown worker:worker /data
+USER worker
+EXPOSE 8000
+CMD ["python", "-m", "logo_remover.gpu_service.launch"]
+
+# --target service is diagnostic CPU transport testing only, never an AI fallback.
+FROM service AS gpu
+USER root
+ARG TORCH_SPEC="torch>=2.6,<3"
+ARG TORCH_INDEX="https://download.pytorch.org/whl/cu126"
+RUN --mount=type=secret,id=build_ca --mount=type=cache,target=/root/.cache/pip \
+    if [ -f /run/secrets/build_ca ]; then export PIP_CERT=/run/secrets/build_ca SSL_CERT_FILE=/run/secrets/build_ca; fi \
+    && python -m pip install "$TORCH_SPEC" --index-url "$TORCH_INDEX" \
+    && python -m pip freeze > /app/build-packages.txt
+USER worker

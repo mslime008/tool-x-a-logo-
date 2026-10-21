@@ -85,3 +85,34 @@ def test_canvas_letterbox_draw_and_async_import(tmp_path):
     assert window.jobs[0].output.exists()
     window.close()
     app.processEvents()
+
+
+def test_cloud_decline_never_enqueues_or_uploads(monkeypatch, tmp_path):
+    import time
+    from PySide6.QtTest import QTest
+    from logo_remover.app import HttpGPUProvider
+    app = QApplication.instance() or QApplication([])
+    calls = []
+    class Provider:
+        url = "https://private-gpu.example"
+        def capabilities(self):
+            calls.append("capabilities")
+            return {"provider_name": "Test GPU", "model": "licensed-model", "test_model": False,
+                    "retention_hours_max": 24, "capability_revision": "a" * 64,
+                    "data_region": "Development", "privacy_policy_url": "https://example.org/policy"}
+        def close(self):
+            pass
+    monkeypatch.setattr(HttpGPUProvider, "from_environment", lambda **kwargs: Provider())
+    window = Window()
+    monkeypatch.setattr(window, "confirm_cloud", lambda *args: False)
+    meta = parse_metadata({"streams": [{"codec_type": "video", "width": 100, "height": 80,
+                           "duration": "8", "avg_frame_rate": "25/1"}]}, "input.mp4")
+    job = Job.snapshot(meta, [Mask(points=[(1, 1), (5, 5)], end=8)], tmp_path / "output.mp4", ExportSettings())
+    window.prepare_cloud(job)
+    deadline = time.monotonic() + 5
+    while window.tasks and time.monotonic() < deadline:
+        app.processEvents()
+        QTest.qWait(10)
+    assert calls == ["capabilities"] and window.jobs == []
+    window.close()
+    app.processEvents()

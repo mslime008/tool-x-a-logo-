@@ -3,6 +3,8 @@ from copy import deepcopy
 from pathlib import Path
 import sys
 import uuid
+import time
+from dataclasses import replace
 import cv2
 import numpy as np
 from PySide6.QtCore import Qt, QPointF, QRectF, QRunnable, QThreadPool, QTimer, Signal, QObject, Slot
@@ -17,6 +19,7 @@ from .masks import Mask
 from .metadata import probe
 from .queue import Job, ExportWorker
 from .settings import preferences
+from .cloud_client import CloudOptions, HttpGPUProvider
 
 
 class TaskSignals(QObject):
@@ -286,8 +289,16 @@ class Window(QMainWindow):
         export_box = QGroupBox("Xuất và hàng đợi")
         form = QFormLayout(export_box)
         self.mode = QComboBox()
-        self.mode.addItems(["Cục bộ nhanh", "Đám mây AI chất lượng (chưa tích hợp)", "Tự động (cục bộ)"])
+        self.mode.addItems(["Cục bộ nhanh", "Đám mây GPU (cần cấu hình)", "Tự động (cục bộ)"])
         form.addRow("Chế độ", self.mode)
+        self.mode.currentIndexChanged.connect(lambda index: self.statusBar().showMessage(
+            "Xem trước dùng thuật toán cục bộ; model GPU chỉ được dùng cho tác vụ cloud đã xác nhận."
+            if index == 1 else "Cục bộ / Tự động không tải video lên cloud."))
+        self.cloud_retention = QSpinBox()
+        self.cloud_retention.setRange(1, 24)
+        self.cloud_retention.setValue(1)
+        self.cloud_retention.setSuffix(" giờ")
+        form.addRow("Giữ tệp cloud tối đa", self.cloud_retention)
         self.method = QComboBox()
         self.method.addItems(["TELEA", "Navier–Stokes"])
         form.addRow("Thuật toán", self.method)
@@ -629,9 +640,6 @@ class Window(QMainWindow):
     def enqueue(self):
         if self.meta is None or self.loading:
             return
-        if self.mode.currentIndex() == 1:
-            self.error("Phase 1 chưa có nhà cung cấp cloud thực. Không có tệp nào được tải lên. Mock chỉ dành cho kiểm thử API.")
-            return
         if self.meta.hdr:
             self.error("Không xuất HDR qua pipeline local BGR 8 bit. Hãy chuyển SDR có kiểm soát trước.")
             return
@@ -640,9 +648,52 @@ class Window(QMainWindow):
             return
         output = Path(self.output_dir) / (Path(self.meta.path).stem + "_da_xoa_logo_" + uuid.uuid4().hex[:8] + ".mp4")
         job = Job.snapshot(self.meta, self.masks, output, self.export_settings())
+        if self.mode.currentIndex() == 1:
+            self.prepare_cloud(job)
+            return
         self.jobs.append(job)
         self.refresh_jobs()
         self.start_next()
+
+    def confirm_cloud(self, job, options):
+        dialog = QMessageBox(self)
+        dialog.setWindowTitle("Xác nhận tải lên và xử lý bằng GPU")
+        warning = ("\nMÔ HÌNH KIỂM THỬ: chỉ kiểm tra hệ thống, KHÔNG xóa logo." if options.test_model else "")
+        dialog.setText(f"Video: {Path(job.meta.path).name}\n"
+            f"Nhà cung cấp: {options.provider_name}\nĐịa chỉ: {options.url}\n"
+            f"Vùng dữ liệu: {options.data_region}\nChính sách: {options.privacy_policy_url}\n"
+            f"Model: {options.model}\nGiữ tệp tối đa: {options.retention_hours} giờ.\n"
+            "Video gốc và mask sẽ được tải lên. Yêu cầu xóa sau khi tải kết quả đã xác minh hoặc khi hủy; "
+            "hạn lưu vẫn áp dụng nếu mất kết nối. Bạn chịu phí xử lý của nhà cung cấp đã cấu hình. "
+            "Chỉ tiếp tục nếu bạn có quyền chỉnh sửa video và chấp thuận chính sách dữ liệu của nhà cung cấp."
+            + warning)
+        accept = dialog.addButton("Đồng ý tải lên và xử lý", QMessageBox.ButtonRole.AcceptRole)
+        dialog.addButton("Không tải lên", QMessageBox.ButtonRole.RejectRole)
+        dialog.exec()
+        return dialog.clickedButton() is accept
+
+    def prepare_cloud(self, job):
+        retention = self.cloud_retention.value()
+        def discover():
+            provider = HttpGPUProvider.from_environment()
+            try:
+                return provider.url, provider.capabilities()
+            finally:
+                provider.close()
+        def complete(result):
+            if self.closing:
+                return
+            url, caps = result
+            options = CloudOptions(url, caps["provider_name"], caps["model"], time.time(),
+                min(retention, caps["retention_hours_max"]), caps["test_model"], uuid.uuid4().hex, caps["capability_revision"],
+                caps["data_region"], caps["privacy_policy_url"])
+            if not self.confirm_cloud(job, options):
+                return
+            job.cloud = replace(options, approved_at=time.time())
+            self.jobs.append(job)
+            self.refresh_jobs()
+            self.start_next()
+        self.task(discover, complete)
 
     def refresh_jobs(self):
         row = self.queue_list.currentRow()
@@ -656,7 +707,9 @@ class Window(QMainWindow):
     def queue_detail(self, row):
         if 0 <= row < len(self.jobs):
             job = self.jobs[row]
-            self.job_info.setText(f"{job.output}\n{job.settings.codec} CRF {job.settings.crf} • {len(job.masks)} mask\n{job.error}")
+            cloud_info = (f"\nCloud: {job.cloud.provider_name} • {job.cloud.model}\nMã máy chủ: {job.remote_id or 'chưa gửi'}"
+                          if job.cloud else "")
+            self.job_info.setText(f"{job.output}\n{job.settings.codec} CRF {job.settings.crf} • {len(job.masks)} mask{cloud_info}\n{job.error}")
 
     def start_next(self):
         if self.active_job is not None:
@@ -703,6 +756,13 @@ class Window(QMainWindow):
     def retry_job(self):
         job = self.selected_job()
         if job and job.status in {"Lỗi", "Đã hủy"}:
+            if job.cloud:
+                if not self.confirm_cloud(job, job.cloud):
+                    return
+                if job.status == "Đã hủy":
+                    job.remote_id = None
+                    job.cloud = replace(job.cloud, idempotency_key=uuid.uuid4().hex)
+                job.cloud = replace(job.cloud, approved_at=time.time())
             job.cancel.clear()
             job.status, job.error, job.progress = "Đang chờ", "", 0
             self.refresh_jobs()

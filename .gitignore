@@ -23,3 +23,14 @@ temp/
 outputs/
 renders/
 *.log
+# Private GPU service state and operator-owned model/license configuration
+service-data/
+cloud-state/
+*.part
+*.npy
+*.pt
+*.pth
+*.safetensors
+service-config*.json
+
+!deploy/service-config.example.json

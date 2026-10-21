@@ -99,15 +99,20 @@ def parse_metadata(data: dict, path: str) -> VideoMetadata:
         hdr=transfer in {"smpte2084", "arib-std-b67"})
 
 
-def probe(path: str | Path) -> VideoMetadata:
+def probe(path: str | Path, *, safe: bool = False) -> VideoMetadata:
     p = Path(path).resolve()
     if p.suffix.lower() not in {".mp4", ".mov"}:
         raise MediaError("Chỉ hỗ trợ đầu vào MP4 và MOV.")
-    return parse_metadata(run_json(["-show_streams", "-show_format", str(p)]), str(p))
+    options = ["-protocol_whitelist", "file,pipe", "-format_whitelist", "mov", "-enable_drefs", "0"] if safe else []
+    if safe:
+        options += ["-show_entries", "stream=index,codec_name,codec_type,width,height,duration,avg_frame_rate,time_base,start_time,sample_aspect_ratio,pix_fmt,color_space,color_transfer,color_primaries,color_range:stream_tags=rotate:stream_disposition=attached_pic:stream_side_data=rotation:format=duration,format_name"]
+    return parse_metadata(run_json([*options, "-show_streams", "-show_format", str(p)]), str(p))
 
 
-def frame_times(meta: VideoMetadata, cancel: Event | None = None) -> tuple[list[float], list[float]]:
-    data = run_json(["-select_streams", str(meta.video_index), "-show_frames", "-show_entries",
+def frame_times(meta: VideoMetadata, cancel: Event | None = None, *, safe: bool = False) -> tuple[list[float], list[float]]:
+    options = (["-protocol_whitelist", "file,pipe", "-format_whitelist", "mov", "-enable_drefs", "0",
+                "-read_intervals", "%+#10000"] if safe else [])
+    data = run_json([*options, "-select_streams", str(meta.video_index), "-show_frames", "-show_entries",
                      "frame=best_effort_timestamp_time,pkt_duration_time,duration_time", meta.path], cancel)
     frames = data.get("frames", [])
     if not frames:
